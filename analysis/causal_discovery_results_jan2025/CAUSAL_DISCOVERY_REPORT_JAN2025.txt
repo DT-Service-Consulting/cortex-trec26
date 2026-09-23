@@ -1,0 +1,55 @@
+================================================================================
+CAUSAL DISCOVERY REPORT: OFFICIAL TIGRAMITE PCMCI WITH LINK ASSUMPTIONS
+================================================================================
+Dataset    : Infrabel January 2025 Preprocessed Traversals (traversals_202501.csv)
+Target Day : Tuesday, January 7, 2025 (07-01-2025), from 15:58:46 to 16:40:00
+Grid       : 1-MINUTE TIME SERIES RESOLUTION (43 rows x 13 columns)
+Library    : Official Tigramite Library (PCMCI)
+Test       : RobustParCorr(significance='analytic') (Robust Partial Correlation)
+Constraint : link_assumptions (Strictly Forward Temporal Direction: t_dep(Ti) < t_dep(Tj))
+Lags Tested: tau in [1, 10] MINUTES (tau = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+Fleet Scope: Strictly the 11 Track 0/4 Convoy Trains
+Date       : September 2, 2026
+
+--------------------------------------------------------------------------------
+1. THE 11 TRACK 0/4 CONVOY TRAINS & PHYSICAL TIMETABLE PROGRESSION
+--------------------------------------------------------------------------------
+  1. Train 3786 (L B2-2)  : Planned 15:52, Actual 15:55:02 (+182s)
+  2. Train 2435 (IC 18)   : Planned 15:48, Actual 15:58:26 (+626s MAJOR BREAKDOWN!)
+  3. Train 5137 (IC 13)   : Planned 15:57, Actual 16:00:44 (+224s)
+  4. Train 1937 (IC 06-1) : Planned 16:01, Actual 16:04:03 (+183s)
+  5. Train 9240 (IC 35)   : Planned 16:08, Actual 16:07:50 (-9s on-time)
+  6. Train 6587 (L B8-4)  : Planned 16:05, Actual 16:11:24 (+384s)
+  7. Train 1737 (IC 14)   : Planned 16:12, Actual 16:13:59 (+119s)
+  8. Train 2136 (IC 16-1) : Planned 16:18, Actual 16:18:13 (+13s)
+  9. Train 3687 (L B2-1)  : Planned 16:22, Actual 16:22:31 (+31s)
+  10. Train 2339 (IC 23-2): Planned 16:27, Actual 16:27:36 (+36s)
+  11. Train 3987 (L B8-1) : Planned 16:31, Actual 16:33:17 (+137s)
+
+--------------------------------------------------------------------------------
+2. TOP DISCOVERED FORWARD CAUSAL PATHWAYS (TIGRAMITE + LINK ASSUMPTIONS)
+--------------------------------------------------------------------------------
+Total significant forward links: 49 (Cross-variable: 38)
+
+  * Train 6587 (16:11) --> Train 2136 (16:18) | r_partial = +0.9562 (p = 1.4e-11) [tau = 1m]
+  * Train 9240 (16:07) --> Train 1737 (16:13) | r_partial = +0.9189 (p = 1.6e-09) [tau = 9m]
+  * Train 5137 (16:00) --> Train 1737 (16:13) | r_partial = +0.9182 (p = 1.7e-09) [tau = 10m]
+  * Train 6587 (16:11) --> Train 2339 (16:27) | r_partial = +0.8868 (p = 1.9e-07) [tau = 8m]
+  * Train 3687 (16:22) --> Train 2339 (16:27) | r_partial = +0.8839 (p = 2.4e-07) [tau = 3m]
+  * Train 2339 (16:27) --> Train 3987 (16:33) | r_partial = +0.7775 (p = 8.9e-05) [tau = 3m]
+  * Train 6587 (16:11) --> Train 3987 (16:33) | r_partial = -0.7407 (p = 4.4e-04) [tau = 4m]
+  * Train 2435 (15:58) --> Train 1937 (16:04) | r_partial = -1.0000 (p < 1.0e-15) [tau = 6m]
+  * Train 5137 (16:00) --> Train 1937 (16:04) | r_partial = -1.0000 (p < 1.0e-15) [tau = 3m]
+  * Train 3687 (16:22) --> Train 3987 (16:33) | r_partial = +1.0000 (p < 1.0e-15) [tau = 8m]
+
+--------------------------------------------------------------------------------
+3. INTERACTIVE DASHBOARD WITH LAG CONDITIONING
+--------------------------------------------------------------------------------
+All interactive analysis is hosted in:
+  analysis/causal_discovery_results_jan2025/interactive_causal_dag_07JAN2025_tigramite_tau1_10.html
+
+Features:
+  - Lag Condition Toolbar (tau = 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, 10m, tau <= 5m, All)
+  - Partial Correlation (r) labeled on every edge
+  - On-click Train Isolation with conditional side inspector
+================================================================================

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Causal Discovery Conditioned by Lags | 27-01-2025 Rush-Hour</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { margin: 0; padding: 0; background: #0B0E14; color: #E4E6EB; overflow: hidden; }
+        
+        #header {
+            position: absolute; top: 0; left: 0; right: 0; height: 72px;
+            background: rgba(11, 14, 20, 0.97); border-bottom: 1px solid #242936;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 24px; z-index: 100;
+        }
+        #header h1 { font-size: 16px; margin: 0; font-weight: 700; color: #FFFFFF; display: flex; align-items: center; gap: 8px; }
+        #header p { font-size: 11.5px; margin: 3px 0 0 0; color: #8F96A3; }
+        
+        #lag-toolbar {
+            display: flex; align-items: center; gap: 6px; background: #151922;
+            padding: 6px 12px; border-radius: 24px; border: 1px solid #2B3242;
+        }
+        .lag-pill {
+            background: #1E2330; color: #9A9DA3; border: 1px solid #323A4D;
+            padding: 4px 10px; border-radius: 14px; font-size: 11px; font-weight: 600;
+            cursor: pointer; transition: all 0.15s ease;
+        }
+        .lag-pill:hover { background: #2A78D6; color: white; border-color: #2A78D6; }
+        .lag-pill.active { background: #2A78D6; color: white; border-color: #4DA3FF; box-shadow: 0 0 10px rgba(42, 120, 214, 0.5); }
+        .lag-pill.all-pill.active { background: #8E44AD; border-color: #A569BD; box-shadow: 0 0 10px rgba(142, 68, 173, 0.5); }
+
+        #network { width: 100vw; height: 100vh; padding-top: 72px; }
+
+        #condition-banner {
+            position: absolute; top: 86px; left: 50%; transform: translateX(-50%);
+            background: rgba(21, 25, 34, 0.92); border: 1px solid #323A4D; border-radius: 20px;
+            padding: 6px 18px; font-size: 12px; font-weight: 600; color: #4DA3FF;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5); z-index: 90; backdrop-filter: blur(8px);
+            display: flex; align-items: center; gap: 8px;
+        }
+        
+        #inspector {
+            position: absolute; top: 86px; left: 20px; width: 340px;
+            background: rgba(18, 22, 30, 0.96); border: 1px solid #2B3242;
+            border-radius: 12px; padding: 18px; font-size: 12px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.65); z-index: 100;
+            backdrop-filter: blur(10px); max-height: calc(100vh - 120px); overflow-y: auto;
+        }
+        #inspector h2 { font-size: 15px; margin: 0 0 8px 0; color: #4DA3FF; display: flex; align-items: center; justify-content: space-between; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #2A78D6; color: white; }
+        .section-title { font-weight: 700; color: #FFFFFF; margin: 12px 0 6px 0; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.5px; }
+        .causal-item { background: #13161F; border: 1px solid #252B3B; border-radius: 6px; padding: 8px 10px; margin: 5px 0; }
+        .causal-incoming { border-left: 3.5px solid #E74C3C; }
+        .causal-outgoing { border-left: 3.5px solid #2ECC71; }
+        
+        #controls {
+            position: absolute; top: 86px; right: 20px; width: 250px;
+            background: rgba(18, 22, 30, 0.96); border: 1px solid #2B3242;
+            border-radius: 12px; padding: 16px; font-size: 12px;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.65); z-index: 100;
+        }
+        select, button {
+            background: #1A1F2C; color: white; border: 1px solid #323A4D; padding: 8px 10px;
+            border-radius: 6px; cursor: pointer; font-size: 11.5px; margin: 4px 0; width: 100%;
+            font-weight: 500; transition: all 0.15s;
+        }
+        select:focus, button:hover { background: #2A78D6; border-color: #2A78D6; }
+        
+        #legend {
+            position: absolute; bottom: 20px; right: 20px;
+            background: rgba(18, 22, 30, 0.96); border: 1px solid #2B3242;
+            border-radius: 10px; padding: 12px 16px; font-size: 11px;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.5); z-index: 100; max-height: 180px; overflow-y: auto;
+        }
+        .legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+        .legend-item { display: flex; align-items: center; margin: 2px 0; }
+        .legend-line { width: 20px; height: 3px; margin-right: 6px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <div>
+            <h1>🚆 Causal Discovery Conditioned by Lags | 27-01-2025 Rush-Hour</h1>
+            <p>Official Tigramite PCMCI (RobustParCorr) | 9 Track 0/2 Convoy Trains (N2S) | Forward Causality Only</p>
+        </div>
+        
+        <!-- LAG CONDITION SELECTOR TOOLBAR -->
+        <div id="lag-toolbar">
+            <span style="font-size: 11px; font-weight: 700; color: #FFFFFF; margin-right: 4px;">CONDITION BY LAG:</span>
+            <button class="lag-pill all-pill" onclick="setLagCondition('all', this)">All Lags</button>
+            <button class="lag-pill" onclick="setLagCondition('1', this)">τ = 1m</button>
+            <button class="lag-pill" onclick="setLagCondition('2', this)">τ = 2m</button>
+            <button class="lag-pill" onclick="setLagCondition('3', this)">τ = 3m</button>
+            <button class="lag-pill" onclick="setLagCondition('4', this)">τ = 4m</button>
+            <button class="lag-pill" onclick="setLagCondition('5', this)">τ = 5m</button>
+            <button class="lag-pill" onclick="setLagCondition('6', this)">τ = 6m</button>
+            <button class="lag-pill active" onclick="setLagCondition('7', this)">τ = 7m</button>
+            <button class="lag-pill" onclick="setLagCondition('8', this)">τ = 8m</button>
+            <button class="lag-pill" onclick="setLagCondition('9', this)">τ = 9m</button>
+            <button class="lag-pill" onclick="setLagCondition('10', this)">τ = 10m</button>
+            <button class="lag-pill" style="background:#2C3E50;" onclick="setLagCondition('lte5', this)">τ ≤ 5m</button>
+        </div>
+    </div>
+
+    <div id="condition-banner">
+        <span id="banner-icon">🎯</span>
+        <span id="banner-text">Conditioned strictly on Lag τ = 7 minutes prior</span>
+    </div>
+
+    <div id="network"></div>
+
+    <div id="inspector">
+        <h2 id="insp-title">Select a Train</h2>
+        <p id="insp-desc" style="color: #8F96A3; margin: 0 0 10px 0;">Click on any train node on the canvas to inspect its direct causal parents and downstream effects conditioned by the selected lag.</p>
+        <div id="insp-content" style="display: none;">
+            <div id="insp-meta" style="background: #13161F; border-radius: 6px; padding: 10px; border: 1px solid #252B3B; margin-bottom: 12px;"></div>
+            
+            <div class="section-title" style="color: #E74C3C;">🟧 Direct Causes (What Delayed This Train?):</div>
+            <div id="insp-causes"></div>
+
+            <div class="section-title" style="color: #2ECC71;">🟩 Downstream Effects (What Did This Train Delay?):</div>
+            <div id="insp-effects"></div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <b style="color: #FFFFFF; display: block; margin-bottom: 4px;">Isolate Specific Train:</b>
+        <select id="train-selector" onchange="selectTrainFromDropdown(this.value)">
+            <option value="">-- Choose a Train --</option>
+        </select>
+        
+        <hr style="border: none; border-top: 1px solid #252B3B; margin: 10px 0;">
+        <button onclick="showAllEdgesCurrentCondition()" style="background: #2D4059;">Show All Edges (This Lag)</button>
+        <button onclick="clearSelection()" style="background: #393E46;">Hide Edges / Reset Train</button>
+        <button onclick="network.fit({animation: true})">Fit / Center Canvas</button>
+    </div>
+
+    <div id="legend">
+        <b style="color: #FFFFFF; font-size: 11px; display: block; margin-bottom: 4px;">Lag Color Coding:</b>
+        <div class="legend-grid">
+            <div class="legend-item"><div class="legend-line" style="background: #E74C3C;"></div><span>τ=1 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #E67E22;"></div><span>τ=2 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #F1C40F;"></div><span>τ=3 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #2ECC71;"></div><span>τ=4 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #1ABC9C;"></div><span>τ=5 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #3498DB;"></div><span>τ=6 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #9B59B6;"></div><span>τ=7 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #34495E;"></div><span>τ=8 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #D35400;"></div><span>τ=9 min</span></div>
+            <div class="legend-item"><div class="legend-line" style="background: #7F8C8D;"></div><span>τ=10 min</span></div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        var masterNodes = [{"id": "Train_1538_delay", "label": "Train 1538\\n(IC 03)\\n17:18", "title": "Train 1538 (IC 03) - Planned: 17:15:00 | Actual: 17:18:34 | Central: 17:22:10", "shape": "dot", "size": 22, "color": {"background": "#2A78D6", "border": "#1B4D8A", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> IC 03<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:15:00<br><b>Actual Nord Dep:</b> 17:18:34<br><b>Central Arr / Dep:</b> 17:22:10 / 17:24:29<br><b>Actual Midi Arr:</b> 17:27:50<br><b>27-01-2025 Entry Delay:</b> +214 s<br><b>Delay Gained in Tunnel:</b> +16 s"}, {"id": "Train_8013_delay", "label": "Train 8013\\n(P)\\n17:20", "title": "Train 8013 (P) - Planned: 17:19:00 | Actual: 17:20:46 | Central: 17:26:15", "shape": "dot", "size": 22, "color": {"background": "#2A78D6", "border": "#1B4D8A", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> P<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:19:00<br><b>Actual Nord Dep:</b> 17:20:46<br><b>Central Arr / Dep:</b> 17:26:15 / 17:28:05<br><b>Actual Midi Arr:</b> 17:31:15<br><b>27-01-2025 Entry Delay:</b> +106 s<br><b>Delay Gained in Tunnel:</b> +89 s"}, {"id": "Train_2238_delay", "label": "Train 2238\\n(IC 23-1)\\n17:22", "title": "Train 2238 (IC 23-1) - Planned: 17:11:00 | Actual: 17:22:57 | Central: 17:29:54", "shape": "dot", "size": 28, "color": {"background": "#E74C3C", "border": "#991B1B", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> IC 23-1<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:11:00<br><b>Actual Nord Dep:</b> 17:22:57<br><b>Central Arr / Dep:</b> 17:29:54 / 17:31:48<br><b>Actual Midi Arr:</b> 17:35:20<br><b>27-01-2025 Entry Delay:</b> +717 s<br><b>Delay Gained in Tunnel:</b> +203 s<br><span style='color:#FF4D4D; font-weight:700;'>\ud83d\udea8 PRIMARY BOTTLENECK LEADER (+717s Entry Delay)</span>"}, {"id": "Train_438_delay", "label": "Train 438\\n(IC 12)\\n17:30", "title": "Train 438 (IC 12) - Planned: 17:23:00 | Actual: 17:30:42 | Central: 17:34:22", "shape": "dot", "size": 22, "color": {"background": "#2A78D6", "border": "#1B4D8A", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> IC 12<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:23:00<br><b>Actual Nord Dep:</b> 17:30:42<br><b>Central Arr / Dep:</b> 17:34:22 / 17:36:16<br><b>Actual Midi Arr:</b> 17:39:31<br><b>27-01-2025 Entry Delay:</b> +462 s<br><b>Delay Gained in Tunnel:</b> -11 s"}, {"id": "Train_8002_delay", "label": "Train 8002\\n(P)\\n17:32", "title": "Train 8002 (P) - Planned: 17:31:00 | Actual: 17:32:54 | Central: 17:38:19", "shape": "dot", "size": 22, "color": {"background": "#2A78D6", "border": "#1B4D8A", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> P<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:31:00<br><b>Actual Nord Dep:</b> 17:32:54<br><b>Central Arr / Dep:</b> 17:38:19 / 17:40:21<br><b>Actual Midi Arr:</b> 17:43:45<br><b>27-01-2025 Entry Delay:</b> +114 s<br><b>Delay Gained in Tunnel:</b> +111 s"}, {"id": "Train_3239_delay", "label": "Train 3239\\n(IC 26)\\n17:36", "title": "Train 3239 (IC 26) - Planned: 17:35:00 | Actual: 17:36:16 | Central: 17:42:14", "shape": "dot", "size": 22, "color": {"background": "#2A78D6", "border": "#1B4D8A", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> IC 26<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:35:00<br><b>Actual Nord Dep:</b> 17:36:16<br><b>Central Arr / Dep:</b> 17:42:14 / 17:43:48<br><b>Actual Midi Arr:</b> 17:48:27<br><b>27-01-2025 Entry Delay:</b> +76 s<br><b>Delay Gained in Tunnel:</b> +191 s"}, {"id": "Train_14_delay", "label": "Train 14\\n(ICE)\\n17:38", "title": "Train 14 (ICE) - Planned: 17:28:00 | Actual: 17:38:52 | Central: 17:45:48", "shape": "dot", "size": 25, "color": {"background": "#E67E22", "border": "#D35400", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> ICE<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:28:00<br><b>Actual Nord Dep:</b> 17:38:52<br><b>Central Arr / Dep:</b> 17:45:48 / 17:45:48<br><b>Actual Midi Arr:</b> 17:52:29<br><b>27-01-2025 Entry Delay:</b> +652 s<br><b>Delay Gained in Tunnel:</b> +397 s<br><span style='color:#FFA502; font-weight:700;'>\u26a0\ufe0f HIGH-SPEED VICTIM (+652s Entry, +397s Lost in Tunnel)</span>"}, {"id": "Train_2839_delay", "label": "Train 2839\\n(IC 20)\\n17:42", "title": "Train 2839 (IC 20) - Planned: 17:39:00 | Actual: 17:42:12 | Central: 17:48:34", "shape": "dot", "size": 22, "color": {"background": "#2A78D6", "border": "#1B4D8A", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> IC 20<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:39:00<br><b>Actual Nord Dep:</b> 17:42:12<br><b>Central Arr / Dep:</b> 17:48:34 / 17:50:31<br><b>Actual Midi Arr:</b> 17:54:36<br><b>27-01-2025 Entry Delay:</b> +192 s<br><b>Delay Gained in Tunnel:</b> +204 s"}, {"id": "Train_3738_delay", "label": "Train 3738\\n(IC 06-2)\\n17:45", "title": "Train 3738 (IC 06-2) - Planned: 17:43:00 | Actual: 17:45:07 | Central: 17:52:11", "shape": "dot", "size": 22, "color": {"background": "#2A78D6", "border": "#1B4D8A", "highlight": {"background": "#F39C12", "border": "#D35400"}}, "meta_html": "<b>Commercial Line:</b> IC 06-2<br><b>Assigned Track:</b> 0/2 (N2S)<br><b>Timetable Nord Dep:</b> 17:43:00<br><b>Actual Nord Dep:</b> 17:45:07<br><b>Central Arr / Dep:</b> 17:52:11 / 17:54:13<br><b>Actual Midi Arr:</b> 17:57:24<br><b>27-01-2025 Entry Delay:</b> +127 s<br><b>Delay Gained in Tunnel:</b> +197 s"}];
+        var masterEdges = [{"id": "Train_1538_delay_Train_2238_delay_lag7", "from": "Train_1538_delay", "to": "Train_2238_delay", "lag": 7, "r": 1.0, "p": "0.0000e+00", "label": "r=+1.00 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>+1.0000</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_8013_delay_Train_2238_delay_lag5", "from": "Train_8013_delay", "to": "Train_2238_delay", "lag": 5, "r": 1.0, "p": "0.0000e+00", "label": "r=+1.00 (\u03c4=5m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#1ABC9C", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 5 (5 min prior)</b><br>Partial Corr: <b>+1.0000</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.16}}, {"id": "Train_1538_delay_Train_3239_delay_lag7", "from": "Train_1538_delay", "to": "Train_3239_delay", "lag": 7, "r": 1.0, "p": "0.0000e+00", "label": "r=+1.00 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>+1.0000</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_8013_delay_Train_3239_delay_lag5", "from": "Train_8013_delay", "to": "Train_3239_delay", "lag": 5, "r": 1.0, "p": "0.0000e+00", "label": "r=+1.00 (\u03c4=5m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#1ABC9C", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 5 (5 min prior)</b><br>Partial Corr: <b>+1.0000</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.16}}, {"id": "Train_2238_delay_Train_3239_delay_lag7", "from": "Train_2238_delay", "to": "Train_3239_delay", "lag": 7, "r": -1.0, "p": "0.0000e+00", "label": "r=-1.00 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>-1.0000</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_1538_delay_Train_438_delay_lag7", "from": "Train_1538_delay", "to": "Train_438_delay", "lag": 7, "r": 1.0, "p": "0.0000e+00", "label": "r=+1.00 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>+1.0000</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_8013_delay_Train_438_delay_lag5", "from": "Train_8013_delay", "to": "Train_438_delay", "lag": 5, "r": 1.0, "p": "0.0000e+00", "label": "r=+1.00 (\u03c4=5m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#1ABC9C", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 5 (5 min prior)</b><br>Partial Corr: <b>+1.0000</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.16}}, {"id": "Train_8002_delay_Train_3239_delay_lag3", "from": "Train_8002_delay", "to": "Train_3239_delay", "lag": 3, "r": 0.9999, "p": "0.0000e+00", "label": "r=+1.00 (\u03c4=3m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#F1C40F", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 3 (3 min prior)</b><br>Partial Corr: <b>+0.9999</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_438_delay_Train_3239_delay_lag7", "from": "Train_438_delay", "to": "Train_3239_delay", "lag": 7, "r": 0.9898, "p": "0.0000e+00", "label": "r=+0.99 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>+0.9898</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_2839_delay_Train_3738_delay_lag4", "from": "Train_2839_delay", "to": "Train_3738_delay", "lag": 4, "r": 0.9882, "p": "0.0000e+00", "label": "r=+0.99 (\u03c4=4m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#2ECC71", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 4 (4 min prior)</b><br>Partial Corr: <b>+0.9882</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.4}}, {"id": "Train_2238_delay_Train_438_delay_lag7", "from": "Train_2238_delay", "to": "Train_438_delay", "lag": 7, "r": -0.982, "p": "0.0000e+00", "label": "r=-0.98 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 6.0, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>-0.9820</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_8002_delay_Train_2839_delay_lag2", "from": "Train_8002_delay", "to": "Train_2839_delay", "lag": 2, "r": 0.9589, "p": "0.0000e+00", "label": "r=+0.96 (\u03c4=2m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#E67E22", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": false, "width": 6.0, "title": "<b>Lag \u03c4 = 2 (2 min prior)</b><br>Partial Corr: <b>+0.9589</b><br>p-value: 0.0000e+00", "smooth": {"type": "curvedCW", "roundness": 0.45999999999999996}}, {"id": "Train_8013_delay_Train_3239_delay_lag9", "from": "Train_8013_delay", "to": "Train_3239_delay", "lag": 9, "r": 0.8473, "p": "2.0000e-06", "label": "r=+0.85 (\u03c4=9m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#D35400", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 5.50745, "title": "<b>Lag \u03c4 = 9 (9 min prior)</b><br>Partial Corr: <b>+0.8473</b><br>p-value: 2.0000e-06", "smooth": {"type": "curvedCW", "roundness": 0.45999999999999996}}, {"id": "Train_8013_delay_Train_438_delay_lag9", "from": "Train_8013_delay", "to": "Train_438_delay", "lag": 9, "r": 0.8019, "p": "1.2000e-05", "label": "r=+0.80 (\u03c4=9m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#D35400", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 5.21235, "title": "<b>Lag \u03c4 = 9 (9 min prior)</b><br>Partial Corr: <b>+0.8019</b><br>p-value: 1.2000e-05", "smooth": {"type": "curvedCW", "roundness": 0.45999999999999996}}, {"id": "Train_438_delay_Train_3738_delay_lag10", "from": "Train_438_delay", "to": "Train_3738_delay", "lag": 10, "r": 0.7945, "p": "2.9000e-05", "label": "r=+0.79 (\u03c4=10m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#7F8C8D", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 5.16425, "title": "<b>Lag \u03c4 = 10 (10 min prior)</b><br>Partial Corr: <b>+0.7945</b><br>p-value: 2.9000e-05", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_14_delay_Train_2839_delay_lag6", "from": "Train_14_delay", "to": "Train_2839_delay", "lag": 6, "r": -0.7764, "p": "5.7000e-05", "label": "r=-0.78 (\u03c4=6m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#3498DB", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 5.0466, "title": "<b>Lag \u03c4 = 6 (6 min prior)</b><br>Partial Corr: <b>-0.7764</b><br>p-value: 5.7000e-05", "smooth": {"type": "curvedCW", "roundness": 0.33999999999999997}}, {"id": "Train_438_delay_Train_14_delay_lag3", "from": "Train_438_delay", "to": "Train_14_delay", "lag": 3, "r": -0.7549, "p": "2.9300e-04", "label": "r=-0.75 (\u03c4=3m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#F1C40F", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 4.90685, "title": "<b>Lag \u03c4 = 3 (3 min prior)</b><br>Partial Corr: <b>-0.7549</b><br>p-value: 2.9300e-04", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_438_delay_Train_14_delay_lag2", "from": "Train_438_delay", "to": "Train_14_delay", "lag": 2, "r": -0.7521, "p": "3.1800e-04", "label": "r=-0.75 (\u03c4=2m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#E67E22", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": false, "width": 4.88865, "title": "<b>Lag \u03c4 = 2 (2 min prior)</b><br>Partial Corr: <b>-0.7521</b><br>p-value: 3.1800e-04", "smooth": {"type": "curvedCW", "roundness": 0.45999999999999996}}, {"id": "Train_438_delay_Train_3239_delay_lag1", "from": "Train_438_delay", "to": "Train_3239_delay", "lag": 1, "r": 0.7187, "p": "5.2600e-04", "label": "r=+0.72 (\u03c4=1m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#E74C3C", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": false, "width": 4.67155, "title": "<b>Lag \u03c4 = 1 (1 min prior)</b><br>Partial Corr: <b>+0.7187</b><br>p-value: 5.2600e-04", "smooth": {"type": "curvedCW", "roundness": 0.28}}, {"id": "Train_2238_delay_Train_14_delay_lag7", "from": "Train_2238_delay", "to": "Train_14_delay", "lag": 7, "r": -0.6897, "p": "1.5390e-03", "label": "r=-0.69 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 4.4830499999999995, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>-0.6897</b><br>p-value: 1.5390e-03", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_3239_delay_Train_14_delay_lag1", "from": "Train_3239_delay", "to": "Train_14_delay", "lag": 1, "r": 0.6841, "p": "1.2370e-03", "label": "r=+0.68 (\u03c4=1m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#E74C3C", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": false, "width": 4.44665, "title": "<b>Lag \u03c4 = 1 (1 min prior)</b><br>Partial Corr: <b>+0.6841</b><br>p-value: 1.2370e-03", "smooth": {"type": "curvedCW", "roundness": 0.28}}, {"id": "Train_438_delay_Train_8002_delay_lag4", "from": "Train_438_delay", "to": "Train_8002_delay", "lag": 4, "r": 0.6611, "p": "1.5050e-03", "label": "r=+0.66 (\u03c4=4m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#2ECC71", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 4.29715, "title": "<b>Lag \u03c4 = 4 (4 min prior)</b><br>Partial Corr: <b>+0.6611</b><br>p-value: 1.5050e-03", "smooth": {"type": "curvedCW", "roundness": 0.4}}, {"id": "Train_1538_delay_Train_14_delay_lag7", "from": "Train_1538_delay", "to": "Train_14_delay", "lag": 7, "r": 0.651, "p": "1.8810e-03", "label": "r=+0.65 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 4.2315000000000005, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>+0.6510</b><br>p-value: 1.8810e-03", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_8013_delay_Train_14_delay_lag5", "from": "Train_8013_delay", "to": "Train_14_delay", "lag": 5, "r": 0.651, "p": "1.8810e-03", "label": "r=+0.65 (\u03c4=5m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#1ABC9C", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 4.2315000000000005, "title": "<b>Lag \u03c4 = 5 (5 min prior)</b><br>Partial Corr: <b>+0.6510</b><br>p-value: 1.8810e-03", "smooth": {"type": "curvedCW", "roundness": 0.16}}, {"id": "Train_438_delay_Train_2839_delay_lag6", "from": "Train_438_delay", "to": "Train_2839_delay", "lag": 6, "r": 0.6325, "p": "2.0910e-03", "label": "r=+0.63 (\u03c4=6m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#3498DB", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 4.11125, "title": "<b>Lag \u03c4 = 6 (6 min prior)</b><br>Partial Corr: <b>+0.6325</b><br>p-value: 2.0910e-03", "smooth": {"type": "curvedCW", "roundness": 0.33999999999999997}}, {"id": "Train_438_delay_Train_2839_delay_lag5", "from": "Train_438_delay", "to": "Train_2839_delay", "lag": 5, "r": 0.6178, "p": "2.8410e-03", "label": "r=+0.62 (\u03c4=5m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#1ABC9C", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 4.0157, "title": "<b>Lag \u03c4 = 5 (5 min prior)</b><br>Partial Corr: <b>+0.6178</b><br>p-value: 2.8410e-03", "smooth": {"type": "curvedCW", "roundness": 0.16}}, {"id": "Train_14_delay_Train_3738_delay_lag3", "from": "Train_14_delay", "to": "Train_3738_delay", "lag": 3, "r": -0.6152, "p": "5.0520e-03", "label": "r=-0.62 (\u03c4=3m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#F1C40F", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.9987999999999997, "title": "<b>Lag \u03c4 = 3 (3 min prior)</b><br>Partial Corr: <b>-0.6152</b><br>p-value: 5.0520e-03", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_438_delay_Train_2839_delay_lag4", "from": "Train_438_delay", "to": "Train_2839_delay", "lag": 4, "r": 0.6073, "p": "3.5040e-03", "label": "r=+0.61 (\u03c4=4m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#2ECC71", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.94745, "title": "<b>Lag \u03c4 = 4 (4 min prior)</b><br>Partial Corr: <b>+0.6073</b><br>p-value: 3.5040e-03", "smooth": {"type": "curvedCW", "roundness": 0.4}}, {"id": "Train_438_delay_Train_3239_delay_lag8", "from": "Train_438_delay", "to": "Train_3239_delay", "lag": 8, "r": 0.5996, "p": "8.5310e-03", "label": "r=+0.60 (\u03c4=8m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#34495E", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.8974, "title": "<b>Lag \u03c4 = 8 (8 min prior)</b><br>Partial Corr: <b>+0.5996</b><br>p-value: 8.5310e-03", "smooth": {"type": "curvedCW", "roundness": 0.28}}, {"id": "Train_438_delay_Train_3239_delay_lag2", "from": "Train_438_delay", "to": "Train_3239_delay", "lag": 2, "r": -0.5995, "p": "8.5430e-03", "label": "r=-0.60 (\u03c4=2m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#E67E22", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": false, "width": 3.8967500000000004, "title": "<b>Lag \u03c4 = 2 (2 min prior)</b><br>Partial Corr: <b>-0.5995</b><br>p-value: 8.5430e-03", "smooth": {"type": "curvedCW", "roundness": 0.45999999999999996}}, {"id": "Train_438_delay_Train_2839_delay_lag3", "from": "Train_438_delay", "to": "Train_2839_delay", "lag": 3, "r": 0.5885, "p": "5.0100e-03", "label": "r=+0.59 (\u03c4=3m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#F1C40F", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.82525, "title": "<b>Lag \u03c4 = 3 (3 min prior)</b><br>Partial Corr: <b>+0.5885</b><br>p-value: 5.0100e-03", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_8002_delay_Train_3239_delay_lag4", "from": "Train_8002_delay", "to": "Train_3239_delay", "lag": 4, "r": -0.5659, "p": "1.4372e-02", "label": "r=-0.57 (\u03c4=4m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#2ECC71", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.6783499999999996, "title": "<b>Lag \u03c4 = 4 (4 min prior)</b><br>Partial Corr: <b>-0.5659</b><br>p-value: 1.4372e-02", "smooth": {"type": "curvedCW", "roundness": 0.4}}, {"id": "Train_438_delay_Train_3239_delay_lag3", "from": "Train_438_delay", "to": "Train_3239_delay", "lag": 3, "r": -0.5649, "p": "1.4570e-02", "label": "r=-0.56 (\u03c4=3m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#F1C40F", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.6718499999999996, "title": "<b>Lag \u03c4 = 3 (3 min prior)</b><br>Partial Corr: <b>-0.5649</b><br>p-value: 1.4570e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_438_delay_Train_2839_delay_lag2", "from": "Train_438_delay", "to": "Train_2839_delay", "lag": 2, "r": 0.5439, "p": "1.0812e-02", "label": "r=+0.54 (\u03c4=2m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#E67E22", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": false, "width": 3.53535, "title": "<b>Lag \u03c4 = 2 (2 min prior)</b><br>Partial Corr: <b>+0.5439</b><br>p-value: 1.0812e-02", "smooth": {"type": "curvedCW", "roundness": 0.45999999999999996}}, {"id": "Train_3239_delay_Train_14_delay_lag3", "from": "Train_3239_delay", "to": "Train_14_delay", "lag": 3, "r": -0.5423, "p": "2.4515e-02", "label": "r=-0.54 (\u03c4=3m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#F1C40F", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.52495, "title": "<b>Lag \u03c4 = 3 (3 min prior)</b><br>Partial Corr: <b>-0.5423</b><br>p-value: 2.4515e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_2238_delay_Train_8002_delay_lag10", "from": "Train_2238_delay", "to": "Train_8002_delay", "lag": 10, "r": 0.5404, "p": "1.6903e-02", "label": "r=+0.54 (\u03c4=10m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#7F8C8D", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.5126, "title": "<b>Lag \u03c4 = 10 (10 min prior)</b><br>Partial Corr: <b>+0.5404</b><br>p-value: 1.6903e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_438_delay_Train_14_delay_lag1", "from": "Train_438_delay", "to": "Train_14_delay", "lag": 1, "r": -0.5163, "p": "2.8257e-02", "label": "r=-0.52 (\u03c4=1m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#E74C3C", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": false, "width": 3.35595, "title": "<b>Lag \u03c4 = 1 (1 min prior)</b><br>Partial Corr: <b>-0.5163</b><br>p-value: 2.8257e-02", "smooth": {"type": "curvedCW", "roundness": 0.28}}, {"id": "Train_1538_delay_Train_8002_delay_lag10", "from": "Train_1538_delay", "to": "Train_8002_delay", "lag": 10, "r": -0.5157, "p": "1.6720e-02", "label": "r=-0.52 (\u03c4=10m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#7F8C8D", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.35205, "title": "<b>Lag \u03c4 = 10 (10 min prior)</b><br>Partial Corr: <b>-0.5157</b><br>p-value: 1.6720e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_8013_delay_Train_8002_delay_lag8", "from": "Train_8013_delay", "to": "Train_8002_delay", "lag": 8, "r": -0.5157, "p": "1.6720e-02", "label": "r=-0.52 (\u03c4=8m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#34495E", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.35205, "title": "<b>Lag \u03c4 = 8 (8 min prior)</b><br>Partial Corr: <b>-0.5157</b><br>p-value: 1.6720e-02", "smooth": {"type": "curvedCW", "roundness": 0.28}}, {"id": "Train_438_delay_Train_3738_delay_lag3", "from": "Train_438_delay", "to": "Train_3738_delay", "lag": 3, "r": 0.5045, "p": "2.3289e-02", "label": "r=+0.50 (\u03c4=3m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#F1C40F", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.2792499999999998, "title": "<b>Lag \u03c4 = 3 (3 min prior)</b><br>Partial Corr: <b>+0.5045</b><br>p-value: 2.3289e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_3239_delay_Train_14_delay_lag9", "from": "Train_3239_delay", "to": "Train_14_delay", "lag": 9, "r": 0.5043, "p": "3.8987e-02", "label": "r=+0.50 (\u03c4=9m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#D35400", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.2779499999999997, "title": "<b>Lag \u03c4 = 9 (9 min prior)</b><br>Partial Corr: <b>+0.5043</b><br>p-value: 3.8987e-02", "smooth": {"type": "curvedCW", "roundness": 0.45999999999999996}}, {"id": "Train_8002_delay_Train_14_delay_lag4", "from": "Train_8002_delay", "to": "Train_14_delay", "lag": 4, "r": 0.5, "p": "2.4763e-02", "label": "r=+0.50 (\u03c4=4m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#2ECC71", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.25, "title": "<b>Lag \u03c4 = 4 (4 min prior)</b><br>Partial Corr: <b>+0.5000</b><br>p-value: 2.4763e-02", "smooth": {"type": "curvedCW", "roundness": 0.4}}, {"id": "Train_3239_delay_Train_14_delay_lag7", "from": "Train_3239_delay", "to": "Train_14_delay", "lag": 7, "r": 0.499, "p": "3.5008e-02", "label": "r=+0.50 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.2435, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>+0.4990</b><br>p-value: 3.5008e-02", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_3239_delay_Train_14_delay_lag4", "from": "Train_3239_delay", "to": "Train_14_delay", "lag": 4, "r": -0.4899, "p": "4.5887e-02", "label": "r=-0.49 (\u03c4=4m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#2ECC71", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.1843500000000002, "title": "<b>Lag \u03c4 = 4 (4 min prior)</b><br>Partial Corr: <b>-0.4899</b><br>p-value: 4.5887e-02", "smooth": {"type": "curvedCW", "roundness": 0.4}}, {"id": "Train_438_delay_Train_2839_delay_lag7", "from": "Train_438_delay", "to": "Train_2839_delay", "lag": 7, "r": 0.4848, "p": "2.5930e-02", "label": "r=+0.48 (\u03c4=7m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#9B59B6", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.1512000000000002, "title": "<b>Lag \u03c4 = 7 (7 min prior)</b><br>Partial Corr: <b>+0.4848</b><br>p-value: 2.5930e-02", "smooth": {"type": "curvedCW", "roundness": 0.1}}, {"id": "Train_2238_delay_Train_14_delay_lag10", "from": "Train_2238_delay", "to": "Train_14_delay", "lag": 10, "r": 0.4791, "p": "4.4261e-02", "label": "r=+0.48 (\u03c4=10m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#7F8C8D", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.11415, "title": "<b>Lag \u03c4 = 10 (10 min prior)</b><br>Partial Corr: <b>+0.4791</b><br>p-value: 4.4261e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_3239_delay_Train_3738_delay_lag10", "from": "Train_3239_delay", "to": "Train_3738_delay", "lag": 10, "r": -0.4779, "p": "3.8515e-02", "label": "r=-0.48 (\u03c4=10m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#7F8C8D", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.10635, "title": "<b>Lag \u03c4 = 10 (10 min prior)</b><br>Partial Corr: <b>-0.4779</b><br>p-value: 3.8515e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_3239_delay_Train_3738_delay_lag9", "from": "Train_3239_delay", "to": "Train_3738_delay", "lag": 9, "r": -0.4764, "p": "3.9179e-02", "label": "r=-0.48 (\u03c4=9m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#D35400", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 3.0966, "title": "<b>Lag \u03c4 = 9 (9 min prior)</b><br>Partial Corr: <b>-0.4764</b><br>p-value: 3.9179e-02", "smooth": {"type": "curvedCW", "roundness": 0.45999999999999996}}, {"id": "Train_1538_delay_Train_2839_delay_lag10", "from": "Train_1538_delay", "to": "Train_2839_delay", "lag": 10, "r": -0.4413, "p": "3.5013e-02", "label": "r=-0.44 (\u03c4=10m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#7F8C8D", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 2.86845, "title": "<b>Lag \u03c4 = 10 (10 min prior)</b><br>Partial Corr: <b>-0.4413</b><br>p-value: 3.5013e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}, {"id": "Train_8013_delay_Train_2839_delay_lag8", "from": "Train_8013_delay", "to": "Train_2839_delay", "lag": 8, "r": -0.4413, "p": "3.5013e-02", "label": "r=-0.44 (\u03c4=8m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#34495E", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 2.86845, "title": "<b>Lag \u03c4 = 8 (8 min prior)</b><br>Partial Corr: <b>-0.4413</b><br>p-value: 3.5013e-02", "smooth": {"type": "curvedCW", "roundness": 0.28}}, {"id": "Train_8013_delay_Train_2839_delay_lag10", "from": "Train_8013_delay", "to": "Train_2839_delay", "lag": 10, "r": -0.4178, "p": "4.7262e-02", "label": "r=-0.42 (\u03c4=10m)", "font": {"size": 11, "color": "#FFFFFF", "strokeWidth": 3.5, "strokeColor": "#000000", "face": "Helvetica"}, "arrows": {"to": {"enabled": true, "scaleFactor": 1.15}}, "color": {"color": "#7F8C8D", "highlight": "#FFCC00", "hover": "#FF3366"}, "dashes": [5, 4], "width": 2.7157, "title": "<b>Lag \u03c4 = 10 (10 min prior)</b><br>Partial Corr: <b>-0.4178</b><br>p-value: 4.7262e-02", "smooth": {"type": "curvedCW", "roundness": 0.22}}];
+        var activeLagCondition = "7";  // Default to Lag 7
+
+        var selector = document.getElementById('train-selector');
+        masterNodes.forEach(function(n) {
+            var opt = document.createElement('option');
+            opt.value = n.id;
+            opt.textContent = n.label.replace(/\n/g, ' ');
+            selector.appendChild(opt);
+        });
+
+        var nodes = new vis.DataSet(masterNodes);
+        var edges = new vis.DataSet([]);
+
+        var container = document.getElementById('network');
+        var data = { nodes: nodes, edges: edges };
+
+        var options = {
+            nodes: {
+                shape: 'dot',
+                font: { size: 12, face: 'Helvetica', color: '#FFFFFF', strokeWidth: 2.5, strokeColor: '#000000' },
+                borderWidth: 2.5
+            },
+            edges: {
+                arrows: { to: { enabled: true, scaleFactor: 1.15 } },
+                hoverWidth: 3.5
+            },
+            interaction: {
+                hover: true,
+                tooltipDelay: 80,
+                hideEdgesOnDrag: false,
+                navigationButtons: true,
+                keyboard: true
+            },
+            physics: {
+                barnesHut: {
+                    gravitationalConstant: -4500,
+                    centralGravity: 0.22,
+                    springLength: 180,
+                    springConstant: 0.04,
+                    damping: 0.09
+                },
+                stabilization: { iterations: 200 }
+            }
+        };
+
+        var network = new vis.Network(container, data, options);
+
+        network.on('selectNode', function(params) {
+            if (params.nodes.length > 0) {
+                highlightTrain(params.nodes[0]);
+            }
+        });
+
+        network.on('deselectNode', function() {
+            clearSelection();
+        });
+
+        function getEdgesForActiveLagCondition() {
+            if (activeLagCondition === "all") {
+                return masterEdges;
+            } else if (activeLagCondition === "lte5") {
+                return masterEdges.filter(function(e) { return e.lag <= 5; });
+            } else {
+                var lagNum = parseInt(activeLagCondition);
+                return masterEdges.filter(function(e) { return e.lag === lagNum; });
+            }
+        }
+
+        function setLagCondition(condVal, btnElement) {
+            activeLagCondition = condVal;
+            
+            var pills = document.querySelectorAll('.lag-pill');
+            pills.forEach(function(p) { p.classList.remove('active'); });
+            if (btnElement) btnElement.classList.add('active');
+
+            var pool = getEdgesForActiveLagCondition();
+            
+            var bannerText = "";
+            if (condVal === "all") {
+                bannerText = "Conditioned on All Lags (τ = 1..10m) | Total " + pool.length + " Causal Links";
+            } else if (condVal === "lte5") {
+                bannerText = "Conditioned on Cumulative Horizon (τ ≤ 5m) | Total " + pool.length + " Causal Links";
+            } else {
+                bannerText = "Conditioned strictly on Lag τ = " + condVal + " minutes prior | Total " + pool.length + " Causal Links";
+            }
+            document.getElementById('banner-text').textContent = bannerText;
+
+            var selectedTrain = document.getElementById('train-selector').value;
+            if (selectedTrain) {
+                highlightTrain(selectedTrain);
+            } else {
+                showAllEdgesCurrentCondition();
+            }
+        }
+
+        function highlightTrain(selectedId) {
+            var nodeObj = masterNodes.find(function(n) { return n.id === selectedId; });
+            if (!nodeObj) return;
+
+            var pool = getEdgesForActiveLagCondition();
+            var connectedEdges = pool.filter(function(e) {
+                return e.from === selectedId || e.to === selectedId;
+            });
+
+            edges.clear();
+            edges.add(connectedEdges);
+
+            document.getElementById('insp-title').innerHTML = nodeObj.label.split('\n')[0] + ' <span class="badge">Isolated</span>';
+            document.getElementById('insp-desc').style.display = 'none';
+            document.getElementById('insp-content').style.display = 'block';
+            document.getElementById('insp-meta').innerHTML = nodeObj.meta_html || '';
+
+            var incoming = connectedEdges.filter(function(e) { return e.to === selectedId; });
+            var causesDiv = document.getElementById('insp-causes');
+            if (incoming.length === 0) {
+                causesDiv.innerHTML = '<div style="color: #7A7D84; font-style: italic;">No direct causes under Lag τ=' + activeLagCondition + '.</div>';
+            } else {
+                causesDiv.innerHTML = incoming.map(function(e) {
+                    var srcNode = masterNodes.find(function(n) { return n.id === e.from; });
+                    var srcLabel = srcNode ? srcNode.label.split('\n')[0] : e.from;
+                    return '<div class="causal-item causal-incoming">' +
+                           '<b>' + srcLabel + '</b> (Lag τ=' + e.lag + 'm prior)<br>' +
+                           '<span style="color: #4DA3FF; font-weight:700;">r = ' + (e.r > 0 ? '+' : '') + e.r + '</span> <span style="color: #8F96A3;">(p = ' + e.p + ')</span>' +
+                           '</div>';
+                }).join('');
+            }
+
+            var outgoing = connectedEdges.filter(function(e) { return e.from === selectedId; });
+            var effectsDiv = document.getElementById('insp-effects');
+            if (outgoing.length === 0) {
+                effectsDiv.innerHTML = '<div style="color: #7A7D84; font-style: italic;">No downstream effects under Lag τ=' + activeLagCondition + '.</div>';
+            } else {
+                effectsDiv.innerHTML = outgoing.map(function(e) {
+                    var tgtNode = masterNodes.find(function(n) { return n.id === e.to; });
+                    var tgtLabel = tgtNode ? tgtNode.label.split('\n')[0] : e.to;
+                    return '<div class="causal-item causal-outgoing">' +
+                           'Delays <b>' + tgtLabel + '</b> (Lag τ=' + e.lag + 'm prior)<br>' +
+                           '<span style="color: #2ECC71; font-weight:700;">r = ' + (e.r > 0 ? '+' : '') + e.r + '</span> <span style="color: #8F96A3;">(p = ' + e.p + ')</span>' +
+                           '</div>';
+                }).join('');
+            }
+
+            document.getElementById('train-selector').value = selectedId;
+        }
+
+        function selectTrainFromDropdown(trainId) {
+            if (!trainId) {
+                clearSelection();
+                return;
+            }
+            network.selectNodes([trainId]);
+            highlightTrain(trainId);
+            network.focus(trainId, { scale: 1.2, animation: true });
+        }
+
+        function clearSelection() {
+            edges.clear();
+            document.getElementById('insp-title').innerHTML = 'Select a Train';
+            document.getElementById('insp-desc').style.display = 'block';
+            document.getElementById('insp-content').style.display = 'none';
+            document.getElementById('train-selector').value = '';
+        }
+
+        function showAllEdgesCurrentCondition() {
+            var pool = getEdgesForActiveLagCondition();
+            edges.clear();
+            edges.add(pool);
+            document.getElementById('insp-title').innerHTML = 'All Edges (Lag Condition: ' + activeLagCondition + ')';
+            document.getElementById('insp-desc').style.display = 'block';
+            document.getElementById('insp-desc').innerHTML = 'Showing all ' + pool.length + ' causal links discovered for this lag condition. Click any train node to isolate.';
+            document.getElementById('insp-content').style.display = 'none';
+        }
+
+        window.onload = function() {
+            showAllEdgesCurrentCondition();
+        };
+    </script>
+</body>
+</html>
